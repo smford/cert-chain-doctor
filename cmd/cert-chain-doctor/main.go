@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/x509"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
@@ -16,6 +19,7 @@ import (
 	"github.com/smford/cert-chain-doctor/internal/analyzer"
 	"github.com/smford/cert-chain-doctor/internal/probe"
 	"github.com/smford/cert-chain-doctor/internal/render"
+	"github.com/smford/cert-chain-doctor/internal/revocation"
 )
 
 var (
@@ -67,6 +71,11 @@ func run(args []string) int {
 	format := fs.String("format", "text", "Output format: 'text' (default) or 'json'")
 	caFile := fs.String("ca-file", "", "Path to custom CA root certificate(s) PEM file for verification")
 	timeoutSec := fs.Int("timeout", 10, "Network dial and handshake timeout in seconds")
+	colorStr := fs.String("color", "auto", "ANSI color output: 'auto', 'always', or 'never'")
+	k8sSecret := fs.String("k8s-secret", "", "Generate a Kubernetes TLS Secret YAML manifest with the repaired bundle")
+	k8sNamespace := fs.String("k8s-namespace", "default", "Kubernetes namespace for generated TLS secret")
+	hostsFile := fs.String("hosts-file", "", "Batch audit multiple endpoints from a newline-delimited text file")
+	checkRevocation := fs.Bool("check-revocation", false, "Actively check reachability of OCSP and CRL distribution endpoints")
 	showVersion := fs.Bool("version", false, "Print version information and exit")
 	fs.BoolVar(showVersion, "v", false, "Print version information and exit")
 
@@ -100,7 +109,7 @@ func run(args []string) int {
 		target = remaining[0]
 	}
 
-	if *filePath == "" && target == "" {
+	if *filePath == "" && target == "" && *hostsFile == "" {
 		fs.Usage()
 		return 1
 	}
@@ -124,6 +133,11 @@ func run(args []string) int {
 		if err != nil {
 			rootPool = x509.NewCertPool()
 		}
+	}
+
+	// 2. Handle batch audit if --hosts-file is provided
+	if *hostsFile != "" {
+		return runBatchAudit(*hostsFile, time.Duration(*timeoutSec)*time.Second, rootPool, *expiryWarnDays, *format, render.ColorMode(*colorStr))
 	}
 
 	// 2. Parse ALPN
@@ -180,14 +194,14 @@ func run(args []string) int {
 	}
 	analysisRes := analyzer.Analyze(probeRes.Certificates, analysisOpts)
 
-	// 5. AIA Chain Repair if requested
+	// 5. AIA Chain Repair if requested or required for K8s secret
 	var repairRes *aia.RepairResult
-	if *fixBundlePath != "" {
+	if *fixBundlePath != "" || *k8sSecret != "" {
 		var repairErr error
 		repairRes, repairErr = aia.RepairChain(probeRes.Certificates, rootPool, aia.DefaultFetcherConfig())
 		if repairErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: Chain repair encountered error: %v\n", repairErr)
-		} else {
+		} else if *fixBundlePath != "" {
 			if err := aia.WriteBundleToFile(*fixBundlePath, repairRes.PEMBundle); err != nil {
 				fmt.Fprintf(os.Stderr, "Error writing repaired bundle to %s: %v\n", *fixBundlePath, err)
 				return 1
@@ -195,7 +209,23 @@ func run(args []string) int {
 		}
 	}
 
-	// 6. Render Output
+	// 6. Check Revocation if requested
+	var revocInfo *render.RevocationInfo
+	if *checkRevocation && len(probeRes.Certificates) > 0 {
+		revocCtx, cancelRevoc := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancelRevoc()
+		status := revocation.CheckRevocationEndpoints(revocCtx, probeRes.Certificates[0], nil)
+		revocInfo = &render.RevocationInfo{
+			OCSPChecked:     status.OCSPChecked,
+			OCSPReachable:   status.OCSPReachable,
+			OCSPServers:     status.OCSPServers,
+			CRLDistribution: status.CRLDistribution,
+			CRLReachable:    status.CRLReachable,
+			Message:         status.Message,
+		}
+	}
+
+	// 7. Render Output
 	displayTarget := target
 	if *filePath != "" {
 		displayTarget = *filePath
@@ -207,6 +237,9 @@ func run(args []string) int {
 		Analysis:      analysisRes,
 		RepairResult:  repairRes,
 		FixBundlePath: *fixBundlePath,
+		K8sSecretName: *k8sSecret,
+		K8sNamespace:  *k8sNamespace,
+		Revocation:    revocInfo,
 	}
 
 	if strings.ToLower(*format) == "json" {
@@ -215,7 +248,7 @@ func run(args []string) int {
 			return 1
 		}
 	} else {
-		render.RenderText(os.Stdout, outputData)
+		render.RenderText(os.Stdout, outputData, render.RenderOptions{ColorMode: render.ColorMode(*colorStr)})
 	}
 
 	// 7. Compute Exit Code
@@ -234,8 +267,8 @@ func run(args []string) int {
 	}
 
 	if hasFatalErrors {
-		// If user requested --fix-bundle and it successfully repaired the chain:
-		if *fixBundlePath != "" && repairedAndTrusted {
+		// If user requested --fix-bundle or --k8s-secret and it successfully repaired the chain:
+		if (*fixBundlePath != "" || *k8sSecret != "") && repairedAndTrusted {
 			if hasExpiryWarning {
 				return 2
 			}
@@ -353,6 +386,102 @@ func runServer(args []string) int {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
 		return 1
+	}
+	return 0
+}
+
+func runBatchAudit(path string, timeout time.Duration, roots *x509.CertPool, warnDays int, format string, colorMode render.ColorMode) int {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading hosts file %s: %v\n", path, err)
+		return 1
+	}
+
+	var targets []string
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		targets = append(targets, line)
+	}
+
+	if len(targets) == 0 {
+		fmt.Fprintf(os.Stderr, "No valid targets found in %s\n", path)
+		return 1
+	}
+
+	var items []render.BatchSummaryItem
+	hasErrors := false
+	hasWarnings := false
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout*time.Duration(len(targets)+1))
+	defer cancel()
+
+	for _, t := range targets {
+		probeRes, err := probe.Probe(ctx, probe.ProbeOptions{
+			TargetHost: t,
+			Timeout:    timeout,
+		})
+		if err != nil {
+			hasErrors = true
+			items = append(items, render.BatchSummaryItem{
+				Target:     t,
+				TLSVersion: "-",
+				Status:     "ERROR",
+				DaysLeft:   0,
+				Issues:     []string{"CONNECT_FAILED"},
+			})
+			continue
+		}
+
+		res := analyzer.Analyze(probeRes.Certificates, analyzer.AnalyzeOptions{
+			Hostname:       probeRes.Details.ServerName,
+			RootPool:       roots,
+			WarnExpiryDays: warnDays,
+		})
+
+		var issueCodes []string
+		itemStatus := "HEALTHY"
+		for _, iss := range res.Issues {
+			if iss.Severity == analyzer.SeverityError {
+				itemStatus = "BROKEN"
+				hasErrors = true
+			} else if iss.Severity == analyzer.SeverityWarning && itemStatus != "BROKEN" {
+				itemStatus = "WARNING"
+				hasWarnings = true
+			}
+			issueCodes = append(issueCodes, iss.Code)
+		}
+
+		daysLeft := 0
+		if len(res.Certificates) > 0 {
+			daysLeft = res.Certificates[0].DaysUntilExpiry
+		}
+
+		items = append(items, render.BatchSummaryItem{
+			Target:     t,
+			TLSVersion: probeRes.Details.TLSVersion,
+			Status:     itemStatus,
+			DaysLeft:   daysLeft,
+			Issues:     issueCodes,
+		})
+	}
+
+	if strings.ToLower(format) == "json" {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(items)
+	} else {
+		render.RenderBatchTable(os.Stdout, items, colorMode)
+	}
+
+	if hasErrors {
+		return 1
+	}
+	if hasWarnings {
+		return 2
 	}
 	return 0
 }

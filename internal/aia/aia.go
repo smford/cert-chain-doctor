@@ -3,6 +3,7 @@ package aia
 import (
 	"bytes"
 	"crypto/x509"
+	"encoding/asn1"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -232,7 +233,46 @@ func ParseCertificatesFromBytes(data []byte) ([]*x509.Certificate, error) {
 		return multi, nil
 	}
 
-	return nil, fmt.Errorf("unable to parse certificate data as either PEM or DER")
+	// Attempt PKCS#7 (.p7b/.p7c) SignedData certificate bundle decoding
+	if p7Certs, p7Err := parsePKCS7Certificates(data); p7Err == nil && len(p7Certs) > 0 {
+		return p7Certs, nil
+	}
+
+	return nil, fmt.Errorf("unable to parse certificate data as PEM, DER, or PKCS#7")
+}
+
+type pkcs7ContentInfo struct {
+	ContentType asn1.ObjectIdentifier
+	Content     asn1.RawValue `asn1:"explicit,tag:0"`
+}
+
+type pkcs7SignedData struct {
+	Version          int
+	DigestAlgorithms []asn1.RawValue `asn1:"set"`
+	ContentInfo      asn1.RawValue
+	Certificates     asn1.RawValue `asn1:"optional,tag:0"`
+}
+
+func parsePKCS7Certificates(data []byte) ([]*x509.Certificate, error) {
+	var ci pkcs7ContentInfo
+	if _, err := asn1.Unmarshal(data, &ci); err != nil {
+		return nil, err
+	}
+	oidSignedData := asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 7, 2}
+	if !ci.ContentType.Equal(oidSignedData) {
+		return nil, fmt.Errorf("not pkcs7 signedData")
+	}
+
+	var sd pkcs7SignedData
+	if _, err := asn1.Unmarshal(ci.Content.Bytes, &sd); err != nil {
+		return nil, err
+	}
+
+	if len(sd.Certificates.Bytes) == 0 {
+		return nil, fmt.Errorf("no certificates found in pkcs7 signedData")
+	}
+
+	return x509.ParseCertificates(sd.Certificates.Bytes)
 }
 
 // EncodeCertificatesToPEM converts a slice of certificates to a concatenated PEM byte slice.

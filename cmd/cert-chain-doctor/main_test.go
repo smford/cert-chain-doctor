@@ -158,3 +158,61 @@ func TestCLI_ServeEndpoints(t *testing.T) {
 		t.Errorf("Expected status 200 on /version, got %d", respV.StatusCode)
 	}
 }
+
+func TestCLI_K8sSecretGeneration(t *testing.T) {
+	suite, err := testpki.GenerateSuite("api.example.com")
+	if err != nil {
+		t.Fatalf("Failed to generate suite: %v", err)
+	}
+	defer suite.Close()
+
+	tmpDir := t.TempDir()
+	certFile := filepath.Join(tmpDir, "server.pem")
+	_ = os.WriteFile(certFile, suite.LeafPEM, 0644)
+	caFile := filepath.Join(tmpDir, "ca.pem")
+	_ = os.WriteFile(caFile, suite.RootPEM, 0644)
+
+	exitCode := run([]string{
+		"--file", certFile,
+		"--ca-file", caFile,
+		"--k8s-secret", "my-tls-secret",
+		"--k8s-namespace", "production",
+	})
+
+	if exitCode != 0 {
+		t.Errorf("Expected exit code 0 for k8s secret generation, got %d", exitCode)
+	}
+}
+
+func TestCLI_BatchAudit(t *testing.T) {
+	suite, err := testpki.GenerateSuite("127.0.0.1")
+	if err != nil {
+		t.Fatalf("Failed to generate suite: %v", err)
+	}
+	defer suite.Close()
+
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	}))
+	ts.TLS = suite.TLSConfig(suite.LeafCert, suite.IntermediateCert)
+	ts.StartTLS()
+	defer ts.Close()
+
+	tmpDir := t.TempDir()
+	hostsPath := filepath.Join(tmpDir, "hosts.txt")
+	content := "# comment line\n" + ts.Listener.Addr().String() + "\n"
+	_ = os.WriteFile(hostsPath, []byte(content), 0644)
+
+	caFile := filepath.Join(tmpDir, "ca.pem")
+	_ = os.WriteFile(caFile, suite.RootPEM, 0644)
+
+	exitCode := run([]string{
+		"--hosts-file", hostsPath,
+		"--ca-file", caFile,
+		"--format", "text",
+	})
+
+	if exitCode != 0 {
+		t.Errorf("Expected exit code 0 for batch audit, got %d", exitCode)
+	}
+}

@@ -73,3 +73,45 @@ func TestRenderTextAndJSON(t *testing.T) {
 		t.Errorf("JSON output missing target: %v", parsed["target"])
 	}
 }
+
+func TestRenderColors(t *testing.T) {
+	suite, err := testpki.GenerateSuite("api.example.com")
+	if err != nil {
+		t.Fatalf("Failed to generate test PKI suite: %v", err)
+	}
+	defer suite.Close()
+
+	analysis := analyzer.Analyze(
+		suite.LeafCertAndIntermediate(),
+		analyzer.AnalyzeOptions{
+			Hostname: "api.example.com",
+			RootPool: suite.RootCertPool,
+		},
+	)
+
+	data := render.OutputData{
+		Target: "api.example.com:443",
+		Analysis: analysis,
+	}
+
+	var buf bytes.Buffer
+	render.RenderText(&buf, data, render.RenderOptions{ColorMode: render.ColorAlways})
+	out := buf.String()
+
+	if !strings.Contains(out, "\033[") {
+		t.Errorf("Expected ANSI escape codes when ColorAlways is set")
+	}
+}
+
+func TestGenerateK8sSecret(t *testing.T) {
+	secret := render.GenerateK8sSecret("my-tls-secret", "prod", []byte("CERTIFICATE DATA"))
+	if !strings.Contains(secret, "name: my-tls-secret") {
+		t.Errorf("Secret missing expected name")
+	}
+	if !strings.Contains(secret, "namespace: prod") {
+		t.Errorf("Secret missing expected namespace")
+	}
+	if !strings.Contains(secret, "type: kubernetes.io/tls") {
+		t.Errorf("Secret missing type kubernetes.io/tls")
+	}
+}

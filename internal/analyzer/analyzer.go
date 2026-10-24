@@ -201,6 +201,42 @@ func Analyze(certs []*x509.Certificate, opts AnalyzeOptions) *AnalysisResult {
 				})
 			}
 		}
+
+		// CA/B Forum validity period check for leaf certificates (max 398 days)
+		if i == 0 && !cert.IsCA {
+			validityDays := int(cert.NotAfter.Sub(cert.NotBefore).Hours() / 24)
+			if validityDays > 398 {
+				result.Issues = append(result.Issues, Issue{
+					Severity:    SeverityWarning,
+					Code:        "EXCESSIVE_VALIDITY_PERIOD",
+					Message:     fmt.Sprintf("Leaf certificate validity period (%d days) exceeds CA/Browser Forum 398-day maximum standard", validityDays),
+					CertIndex:   0,
+					Remediation: "Issue certificates with a validity period of 398 days or fewer to ensure universal browser acceptance.",
+				})
+			}
+
+			// Extended Key Usage Server Authentication check
+			hasServerAuth := false
+			if len(cert.ExtKeyUsage) == 0 {
+				hasServerAuth = true
+			} else {
+				for _, eku := range cert.ExtKeyUsage {
+					if eku == x509.ExtKeyUsageServerAuth || eku == x509.ExtKeyUsageAny {
+						hasServerAuth = true
+						break
+					}
+				}
+			}
+			if !hasServerAuth {
+				result.Issues = append(result.Issues, Issue{
+					Severity:    SeverityError,
+					Code:        "MISSING_SERVER_AUTH_EKU",
+					Message:     "Leaf certificate lacks ExtKeyUsageServerAuth (TLS Web Server Authentication)",
+					CertIndex:   0,
+					Remediation: "Include ServerAuth in Extended Key Usage.",
+				})
+			}
+		}
 	}
 
 	// 3. Leaf Certificate SAN / Hostname check
