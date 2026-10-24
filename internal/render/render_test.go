@@ -90,7 +90,7 @@ func TestRenderColors(t *testing.T) {
 	)
 
 	data := render.OutputData{
-		Target: "api.example.com:443",
+		Target:   "api.example.com:443",
 		Analysis: analysis,
 	}
 

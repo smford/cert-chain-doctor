@@ -58,27 +58,27 @@ type CertDetails struct {
 
 // AnalysisResult contains the complete findings of the certificate chain diagnosis.
 type AnalysisResult struct {
-	Hostname             string        `json:"hostname,omitempty"`
-	Certificates         []CertDetails `json:"certificates"`
-	ChainLength          int           `json:"chain_length"`
-	IsValid              bool          `json:"is_valid"`
-	VerifiedChainsCount  int           `json:"verified_chains_count"`
-	HasMissingInter      bool          `json:"has_missing_intermediate"`
-	HasRedundantRoot     bool          `json:"has_redundant_root"`
-	IsMisordered         bool          `json:"is_misordered"`
-	CanFixViaAIA         bool          `json:"can_fix_via_aia"`
-	CandidateAIAURLs     []string      `json:"candidate_aia_urls,omitempty"`
-	Issues               []Issue       `json:"issues"`
-	VerificationError    string        `json:"verification_error,omitempty"`
-	SummaryVerdict       string        `json:"summary_verdict"`
+	Hostname            string        `json:"hostname,omitempty"`
+	Certificates        []CertDetails `json:"certificates"`
+	ChainLength         int           `json:"chain_length"`
+	IsValid             bool          `json:"is_valid"`
+	VerifiedChainsCount int           `json:"verified_chains_count"`
+	HasMissingInter     bool          `json:"has_missing_intermediate"`
+	HasRedundantRoot    bool          `json:"has_redundant_root"`
+	IsMisordered        bool          `json:"is_misordered"`
+	CanFixViaAIA        bool          `json:"can_fix_via_aia"`
+	CandidateAIAURLs    []string      `json:"candidate_aia_urls,omitempty"`
+	Issues              []Issue       `json:"issues"`
+	VerificationError   string        `json:"verification_error,omitempty"`
+	SummaryVerdict      string        `json:"summary_verdict"`
 }
 
 // AnalyzeOptions configures the chain analyzer.
 type AnalyzeOptions struct {
-	Hostname        string
-	RootPool        *x509.CertPool
-	WarnExpiryDays  int
-	CurrentTime     time.Time
+	Hostname       string
+	RootPool       *x509.CertPool
+	WarnExpiryDays int
+	CurrentTime    time.Time
 }
 
 // Analyze evaluates a list of raw certificates from a TLS handshake or PEM bundle.

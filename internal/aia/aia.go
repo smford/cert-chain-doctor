@@ -22,14 +22,14 @@ type FetcherConfig struct {
 
 // RepairResult represents the outcome of chain repair and AIA chasing.
 type RepairResult struct {
-	OriginalChain       []*x509.Certificate `json:"-"`
-	RepairedChain       []*x509.Certificate `json:"-"`
-	FetchedCerts        []*x509.Certificate `json:"-"`
-	FetchedFromURLs     []string            `json:"fetched_from_urls"`
-	StrippedRedundantRoot bool              `json:"stripped_redundant_root"`
-	Reordered           bool                `json:"reordered"`
-	PEMBundle           []byte              `json:"-"`
-	VerifiedAgainstRoots bool               `json:"verified_against_roots"`
+	OriginalChain         []*x509.Certificate `json:"-"`
+	RepairedChain         []*x509.Certificate `json:"-"`
+	FetchedCerts          []*x509.Certificate `json:"-"`
+	FetchedFromURLs       []string            `json:"fetched_from_urls"`
+	StrippedRedundantRoot bool                `json:"stripped_redundant_root"`
+	Reordered             bool                `json:"reordered"`
+	PEMBundle             []byte              `json:"-"`
+	VerifiedAgainstRoots  bool                `json:"verified_against_roots"`
 }
 
 // DefaultFetcherConfig returns default settings with 10s timeout and 5 hops max.

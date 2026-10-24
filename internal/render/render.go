@@ -25,14 +25,14 @@ const (
 
 // OutputData packages all diagnosis results for rendering.
 type OutputData struct {
-	Target          string                   `json:"target,omitempty"`
-	Handshake       *probe.HandshakeDetails  `json:"handshake,omitempty"`
-	Analysis        *analyzer.AnalysisResult `json:"analysis"`
-	RepairResult    *aia.RepairResult        `json:"repair,omitempty"`
-	FixBundlePath   string                   `json:"fix_bundle_path,omitempty"`
-	K8sSecretName   string                   `json:"k8s_secret_name,omitempty"`
-	K8sNamespace    string                   `json:"k8s_namespace,omitempty"`
-	Revocation      *RevocationInfo          `json:"revocation,omitempty"`
+	Target        string                   `json:"target,omitempty"`
+	Handshake     *probe.HandshakeDetails  `json:"handshake,omitempty"`
+	Analysis      *analyzer.AnalysisResult `json:"analysis"`
+	RepairResult  *aia.RepairResult        `json:"repair,omitempty"`
+	FixBundlePath string                   `json:"fix_bundle_path,omitempty"`
+	K8sSecretName string                   `json:"k8s_secret_name,omitempty"`
+	K8sNamespace  string                   `json:"k8s_namespace,omitempty"`
+	Revocation    *RevocationInfo          `json:"revocation,omitempty"`
 }
 
 // RevocationInfo captures the status of OCSP/CRL checks.

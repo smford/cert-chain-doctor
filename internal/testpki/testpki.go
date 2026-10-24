@@ -21,23 +21,23 @@ import (
 
 // PKISuite holds the in-memory generated certificates and keys.
 type PKISuite struct {
-	RootCert         *x509.Certificate
-	RootKey          crypto.Signer
-	RootPEM          []byte
-	RootCertPool     *x509.CertPool
+	RootCert     *x509.Certificate
+	RootKey      crypto.Signer
+	RootPEM      []byte
+	RootCertPool *x509.CertPool
 
 	IntermediateCert *x509.Certificate
 	IntermediateKey  crypto.Signer
 	IntermediatePEM  []byte
 	IntermediateDER  []byte
 
-	LeafCert         *x509.Certificate
-	LeafKey          crypto.Signer
-	LeafPEM          []byte
+	LeafCert *x509.Certificate
+	LeafKey  crypto.Signer
+	LeafPEM  []byte
 
 	// AIAServer serves the intermediate cert
-	AIAServer        *httptest.Server
-	AIAURL           string
+	AIAServer *httptest.Server
+	AIAURL    string
 }
 
 // ComputeSKI computes the RFC 5280 160-bit SHA-1 Subject Key Identifier.

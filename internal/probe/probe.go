@@ -19,12 +19,12 @@ import (
 
 // ProbeOptions configures the TLS network probe or local file reader.
 type ProbeOptions struct {
-	TargetHost  string        // host or host:port
-	SNI         string        // SNI override
-	ALPN        []string      // ALPN protocol list (e.g. ["h2", "http/1.1"])
-	StartTLS    string        // Protocol for STARTTLS: "smtp", "imap", "pop3", "postgres", "mysql"
-	Timeout     time.Duration // Dial & handshake timeout
-	FilePath    string        // Optional local PEM bundle file path
+	TargetHost string        // host or host:port
+	SNI        string        // SNI override
+	ALPN       []string      // ALPN protocol list (e.g. ["h2", "http/1.1"])
+	StartTLS   string        // Protocol for STARTTLS: "smtp", "imap", "pop3", "postgres", "mysql"
+	Timeout    time.Duration // Dial & handshake timeout
+	FilePath   string        // Optional local PEM bundle file path
 }
 
 // HandshakeDetails captures TLS connection metadata.
@@ -325,8 +325,8 @@ func performStartTLS(conn net.Conn, proto, host string) error {
 
 		// Send SSL Request packet (32 bytes payload: client flags with CLIENT_SSL 0x00000800)
 		sslPacket := make([]byte, 36)
-		binary.LittleEndian.PutUint32(sslPacket[0:4], uint32(32)) // length = 32, seq = 1
-		sslPacket[3] = 1                                         // sequence id 1
+		binary.LittleEndian.PutUint32(sslPacket[0:4], uint32(32))            // length = 32, seq = 1
+		sslPacket[3] = 1                                                     // sequence id 1
 		binary.LittleEndian.PutUint32(sslPacket[4:8], 0x00000800|0x00000200) // CLIENT_SSL | CLIENT_PROTOCOL_41
 		binary.LittleEndian.PutUint32(sslPacket[8:12], 16777216)             // max packet size 16MB
 		sslPacket[12] = 33                                                   // utf8_general_ci
