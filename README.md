@@ -1,13 +1,16 @@
 # cert-chain-doctor
 
+[![CI](https://github.com/smford/cert-chain-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/smford/cert-chain-doctor/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/smford/cert-chain-doctor)](https://goreportcard.com/report/github.com/smford/cert-chain-doctor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-`cert-chain-doctor` is a single-binary CLI diagnostic tool that inspects TLS handshakes and X.509 certificate chains, pinpoints broken intermediate chains (*"works in Chrome, fails in curl/Alpine/Go"*), diagnoses misordered chains and redundant Root CAs, follows Authority Information Access (AIA) URLs to automatically fetch missing intermediate certificates, and outputs the exact repaired `.pem` bundle ready for Nginx, Envoy, or Kubernetes TLS Secrets.
+> **The visual diagnostic tool and automatic repair surgeon for broken TLS handshakes and intermediate certificate chains.**
+
+`cert-chain-doctor` is a single-binary CLI tool that inspects TLS handshakes and X.509 certificate chains, clearly explains broken chains with a visual ASCII tree diagram, and automatically downloads missing intermediate certificates from Authority Information Access (AIA) servers to output clean, production-ready `.pem` bundles.
 
 ```
 ================================================================================
-                     CERT CHAIN DOCTOR - TLS & CHAIN DIAGNOSTIC                 
+              CERT CHAIN DOCTOR - TLS & CHAIN DIAGNOSTIC
 ================================================================================
 Target:     api.example.com:443
 SNI:        api.example.com
@@ -32,7 +35,7 @@ CERTIFICATE CHAIN TREE:
     └── Fetched:  http://cacerts.digicert.com/DigiCertGlobalG2TLSRSASHA2562020CA1-1.crt
 
 FINDINGS & DIAGNOSIS:
-  [ERROR]   MISSING_INTERMEDIATE_AIA_AVAILABLE
+  [ERROR  ] MISSING_INTERMEDIATE_AIA_AVAILABLE
             Chain is missing intermediate CA certificate(s) ('unknown authority' error in curl/Alpine/Go).
             AIA download URL found: http://cacerts.digicert.com/DigiCertGlobalG2TLSRSASHA2562020CA1-1.crt
             -> Remediation: Run cert-chain-doctor with --fix-bundle <repaired.pem> to automatically fetch and assemble the complete chain.
@@ -44,48 +47,156 @@ VERDICT: BROKEN CHAIN: Missing intermediate CA certificate (fixable via AIA with
 
 ---
 
-## The Problem: "Works in Chrome, Fails in curl/Alpine/Go"
+## What Problems Does This Tool Solve?
 
-One of the most frequent SRE and production outages occurs when a TLS certificate works perfectly in desktop web browsers but fails catastrophically with `x509: certificate signed by unknown authority` in:
-- `curl` / `wget`
-- Alpine Linux Docker containers
-- Python (`requests` / `urllib3`)
-- Go microservices
-- Kubernetes admission webhooks
+If you have ever managed a web service, API, or Kubernetes cluster, you have likely run into one of these frustrating TLS headaches:
 
-### Why does this happen?
-Desktop web browsers (Chrome, Edge, Safari) cache previously seen intermediate certificates and automatically perform **Authority Information Access (AIA) chasing** over HTTP when an intermediate is omitted.
+### 1. The "Works in My Browser, Fails in Production" Mystery
+* **The Problem:** You install an SSL certificate on your server. You open the site in Chrome or Safari on your laptop, and it displays a comforting green padlock. But 10 minutes later, your Docker containers, Go microservices, Python scripts, and `curl` commands crash with:
+  ```text
+  x509: certificate signed by unknown authority
+  ```
+* **Why it happens:** Desktop web browsers cheat. When a server forgets to serve its intermediate certificate, browsers quietly query the Certificate Authority's AIA (Authority Information Access) HTTP URL in the background or use certificates cached from other sites you visited earlier. Non-browser clients (like `curl`, Go, Python, and Alpine Linux) do not do this—they strictly require the server to provide the full chain.
+* **How `cert-chain-doctor` solves it:** It dials your server and captures the exact certificates presented—even when the TLS handshake fails. It identifies the missing intermediate certificate, automatically downloads it from the CA's official AIA URL over HTTP, cryptographically verifies the chain (`Leaf.CheckSignatureFrom(Intermediate)`), and writes out a clean, ready-to-use fullchain `.pem` file.
 
-Standard TLS clients (`curl`, Go's `crypto/tls`, OpenSSL, Python) strictly follow RFC 5246 / RFC 8446 and **do not** chase AIA links. If your server only serves the leaf certificate and omits the intermediate CA certificate, non-browser clients immediately drop the connection with an untrusted root or unknown authority error.
+### 2. The "Upside-Down Certificate" (Misordered Chain)
+* **The Problem:** Web servers like Nginx, Envoy, and Apache expect your certificates in a strict sequence: your domain's leaf certificate first, followed by intermediate CA certificates. If certificates are pasted in reverse order or scrambled, strict TLS clients drop the connection.
+* **How `cert-chain-doctor` solves it:** It analyzes cryptographic signatures and Subject/Authority Key Identifiers (`SKI`/`AKI`) to detect inverted or scrambled chains, and automatically sorts them in the correct `Leaf -> Intermediate 1 -> Intermediate 2` sequence.
 
-`cert-chain-doctor` solves this by:
-1. Dialing with `InsecureSkipVerify: true` to capture raw peer certificates even when verification fails.
-2. Detecting the exact intermediate gap using Subject Key Identifier (`SKI`) and Authority Key Identifier (`AKI`) links.
-3. Automatically querying the AIA URL to download the missing intermediate DER/PEM certificates.
-4. Cryptographically verifying the entire hierarchy (`leaf.CheckSignatureFrom(intermediate)`).
-5. Writing out the clean, correctly-ordered `.pem` bundle ready to drop into Nginx, Envoy, Apache, or Kubernetes Secrets.
+### 3. Handshake Payload Bloat (Redundant Root CA)
+* **The Problem:** Many administrators accidentally copy the Root CA certificate into their server bundle. Because clients already have the Root CA installed in their operating system trust store, sending the Root CA over the wire is completely redundant. It wastes bytes on every new TLS connection and can force TLS handshakes into additional TCP round trips on mobile connections.
+* **How `cert-chain-doctor` solves it:** It flags redundant Root CAs with a warning badge and automatically strips them when generating repaired bundles.
+
+### 4. Silent Expirations & Insecure Cryptography
+* **The Problem:** Certificates expire quietly, or use weak 1024-bit RSA keys or deprecated SHA-1 signatures that modern operating systems reject.
+* **How `cert-chain-doctor` solves it:** It alerts you with configurable expiry thresholds (failing with exit code `2` if a certificate expires within 14 days), checks CA/Browser Forum 398-day maximum validity limits, and flags insecure keys and signature algorithms.
 
 ---
 
-## Features
+## Worked Examples & Common Tasks
 
-- **Automated AIA Chain Repair (`--fix-bundle <out.pem>`)**: Downloads missing intermediates (DER/PEM), verifies cryptographic signatures, orders certificates `Leaf -> Intermediate(s)`, and strips redundant Root CAs.
-- **Visual ASCII Chain Tree**: Renders an intuitive tree diagram showing cert roles, validity windows, key types, SANs, and cryptographic parent-child links.
-- **Misordered Chain Detection**: Flags when an intermediate is placed before the leaf, or certificates are inverted.
-- **Redundant Root CA Warning**: Identifies self-signed root certificates bundled into the server handshake that unnecessarily inflate TLS handshake packet size.
-- **Cryptographic Weakness Auditing**: Catches deprecated signatures (`MD5`, `SHA1`) and short RSA keys (`<2048` bits).
-- **STARTTLS Protocol Support**: Probes TLS after plain-text handshakes on `smtp`, `imap`, `pop3`, `postgres`, and `mysql`.
-- **Local PEM File Support (`--file <bundle.pem>`)**: Audits and fixes certificates offline in CI/CD pipelines before deployment.
-- **Machine-Readable Output (`--format json`)**: Full JSON schema for scripting, alerts, and integration into monitoring agents.
-- **Zero-CGO & Minimal Footprint**: Compiles as a statically linked binary with standard library dependencies.
+### Task 1: Diagnose Why `curl` or Alpine Fails on Your Domain
+Run `cert-chain-doctor` against any domain to instantly see what certificates are sent and whether intermediate CAs are missing:
+
+```bash
+cert-chain-doctor api.example.com
+```
+
+### Task 2: Automatically Repair a Broken Intermediate Chain
+Fix a broken server certificate chain by automatically downloading missing intermediate CAs and outputting a clean bundle for Nginx or Envoy:
+
+```bash
+cert-chain-doctor api.example.com --fix-bundle /etc/ssl/certs/repaired-fullchain.pem
+```
+
+Then simply update your Nginx configuration:
+```nginx
+ssl_certificate /etc/ssl/certs/repaired-fullchain.pem;
+ssl_certificate_key /etc/ssl/private/server.key;
+```
+
+### Task 3: Export a Repaired Chain Directly as a Kubernetes Secret
+Generate a ready-to-apply Kubernetes TLS Secret manifest with your repaired bundle base64-encoded:
+
+```bash
+cert-chain-doctor api.example.com \
+  --k8s-secret my-api-tls \
+  --k8s-namespace production \
+  --fix-bundle /tmp/repaired.pem > k8s-tls-secret.yaml
+
+kubectl apply -f k8s-tls-secret.yaml
+```
+
+### Task 4: Validate Local PEM Files Offline in CI/CD
+Check your certificate bundles in git or deployment pipelines before releasing to production:
+
+```bash
+cert-chain-doctor --file /path/to/server-bundle.pem --expiry-warn 30
+```
+* Returns exit code `0` if the bundle is complete, trusted, and healthy.
+* Returns exit code `1` if the chain is broken, missing intermediates, or invalid.
+* Returns exit code `2` if any certificate in the chain expires within 30 days.
+
+### Task 5: Diagnose an IP Address with SNI Override
+When troubleshooting a specific load balancer, ingress controller, or origin IP before updating DNS:
+
+```bash
+cert-chain-doctor 198.51.100.24:443 --sni api.example.com
+```
+
+### Task 6: Audit Mail and Database Servers with STARTTLS
+Probe services that upgrade plain-text connections to TLS:
+
+```bash
+# SMTP (Port 587)
+cert-chain-doctor mail.example.com:587 --starttls smtp
+
+# PostgreSQL (Port 5432)
+cert-chain-doctor db.internal.net:5432 --starttls postgres
+
+# IMAP (Port 143)
+cert-chain-doctor imap.example.com:143 --starttls imap
+```
+
+### Task 7: Batch Audit Multiple Endpoints
+Scan an entire fleet of domains or microservices from a text file:
+
+```bash
+cat <<EOF > endpoints.txt
+api.example.com:443
+auth.example.com:443
+mail.example.com:587
+db.internal.net:5432
+EOF
+
+cert-chain-doctor --hosts-file endpoints.txt
+```
+
+Outputs an aligned summary table:
+```
+================================================================================
+                   CERT CHAIN DOCTOR - BATCH AUDIT SUMMARY
+================================================================================
+TARGET                           TLS        STATUS       EXPIRY   FINDINGS
+--------------------------------------------------------------------------------
+api.example.com:443              TLS 1.3    HEALTHY      68d      None
+auth.example.com:443             TLS 1.3    BROKEN       89d      MISSING_INTERMEDIATE
+mail.example.com:587             TLS 1.3    WARNING      4d       CERT_EXPIRING_SOON
+db.internal.net:5432             TLS 1.3    HEALTHY      180d     None
+--------------------------------------------------------------------------------
+```
+
+### Task 8: Check OCSP Responder Reachability
+Actively verify that the Certificate Authority's OCSP server is reachable and answering:
+
+```bash
+cert-chain-doctor api.example.com --check-revocation
+```
+
+### Task 9: Run as a Diagnostic Microservice / Kubernetes Sidecar
+Start a lightweight HTTP diagnostic server:
+
+```bash
+cert-chain-doctor serve --addr :8080
+```
+* `GET /healthz` — Service health check (`{"status":"ok"}`)
+* `GET /version` — Version and build information
+* `GET /diagnose?target=api.example.com` — Full JSON diagnosis endpoint
 
 ---
 
 ## Installation
 
-### From Source
-Requires Go 1.23+:
+### Pre-Compiled Binaries
+Download the latest binary for your operating system (Linux, macOS, Windows) from the [Releases](https://github.com/smford/cert-chain-doctor/releases) page.
 
+### Homebrew (macOS / Linux)
+```bash
+brew tap smford/homebrew-tap
+brew install cert-chain-doctor
+```
+
+### From Source (Go 1.23+)
 ```bash
 git clone https://github.com/smford/cert-chain-doctor.git
 cd cert-chain-doctor
@@ -93,86 +204,61 @@ make build
 # Binary created at bin/cert-chain-doctor
 ```
 
-Or install directly to your `$GOPATH/bin`:
-```bash
-go install github.com/smford/cert-chain-doctor/cmd/cert-chain-doctor@latest
-```
-
 ---
 
-## Usage
+## CLI Reference
 
-### 1. Diagnose a Live Host
-```bash
-cert-chain-doctor api.example.com
+```text
+Usage:
+  cert-chain-doctor [flags] <host[:port]>
+  cert-chain-doctor --file <bundle.pem> [flags]
+  cert-chain-doctor --hosts-file <hosts.txt> [flags]
+  cert-chain-doctor serve [--addr :8080]
+
+Flags:
+  -file string
+        Analyze a local PEM certificate file/bundle offline instead of dialing a network host
+  -fix-bundle string
+        Automatically chase AIA URLs, verify signatures, and write clean fullchain PEM bundle to this path
+  -sni string
+        Override TLS Server Name Indication (SNI)
+  -alpn string
+        Comma-separated list of ALPN protocols (e.g. 'h2,http/1.1')
+  -starttls string
+        STARTTLS protocol (smtp, imap, pop3, postgres, mysql)
+  -expiry-warn int
+        Warning threshold in days for certificate expiration (default 14)
+  -format string
+        Output format: 'text' (default) or 'json'
+  -color string
+        ANSI color output: 'auto' (default), 'always', or 'never'
+  -k8s-secret string
+        Generate a Kubernetes TLS Secret YAML manifest with the repaired bundle
+  -k8s-namespace string
+        Kubernetes namespace for generated TLS secret (default "default")
+  -hosts-file string
+        Batch audit multiple endpoints from a newline-delimited text file
+  -check-revocation
+        Actively check reachability of OCSP and CRL distribution endpoints
+  -ca-file string
+        Path to custom CA root certificate(s) PEM file for verification
+  -timeout int
+        Network dial and handshake timeout in seconds (default 10)
+  -v, -version
+        Print version information and exit
 ```
-
-### 2. Auto-Repair Broken Intermediate Chain
-```bash
-cert-chain-doctor api.example.com --fix-bundle /etc/ssl/repaired-fullchain.pem
-```
-
-### 3. Diagnose an IP with SNI Override
-```bash
-cert-chain-doctor 192.0.2.1:443 --sni api.example.com
-```
-
-### 4. Inspect a Local Bundle File Offline
-```bash
-cert-chain-doctor --file /path/to/server-bundle.pem
-```
-
-### 5. Check Mail / Database Servers via STARTTLS
-```bash
-# SMTP
-cert-chain-doctor mail.example.com:587 --starttls smtp
-
-# PostgreSQL
-cert-chain-doctor db.internal.net:5432 --starttls postgres
-
-# IMAP
-cert-chain-doctor imap.example.com:143 --starttls imap
-```
-
-### 6. Verify Against Custom CA (Private PKI)
-```bash
-cert-chain-doctor internal.service.local --ca-file /etc/pki/internal-ca.pem
-```
-
-### 7. JSON Output for CI/CD Pipelines
-```bash
-cert-chain-doctor api.example.com --format json | jq '.analysis.is_valid'
-```
-
----
-
-## CLI Flags
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `<host[:port]>` | Port `:443` | Target server address to probe |
-| `--file <path>` | `""` | Local PEM certificate bundle file to inspect offline |
-| `--fix-bundle <path>` | `""` | Automatically fetch AIA intermediates and write clean fullchain PEM |
-| `--sni <hostname>` | host | Override TLS Server Name Indication header |
-| `--alpn <protocols>` | `""` | Comma-separated list of ALPN protocols (e.g. `h2,http/1.1`) |
-| `--starttls <protocol>`| `""` | STARTTLS protocol: `smtp`, `imap`, `pop3`, `postgres`, `mysql` |
-| `--expiry-warn <days>` | `14` | Fail with exit code 2 if any cert expires within N days |
-| `--format <text\|json>`| `text` | Output format: ASCII tree diagram or structured JSON |
-| `--ca-file <path>` | system | Path to custom root CA certificates PEM file |
-| `--timeout <sec>` | `10` | Dial and handshake timeout in seconds |
-| `--version` | `false` | Print version information and exit |
 
 ---
 
 ## Exit Codes
 
-`cert-chain-doctor` adheres to standard UNIX exit conventions for use in deployment checks and CI/CD pipelines:
+`cert-chain-doctor` adheres to standard UNIX exit conventions for use in deployment scripts and CI/CD pipelines:
 
-| Exit Code | Meaning |
-|:---------:|---------|
-| `0` | **Healthy**: Chain is complete, cryptographically verified, and valid (or `--fix-bundle` successfully repaired it). |
-| `1` | **Broken / Error**: Chain verification failed (missing intermediate, hostname mismatch, expired cert, or dial failure). |
-| `2` | **Expiring Soon**: Chain is valid, but at least one certificate expires within the `--expiry-warn` window. |
+| Exit Code | Meaning | Description |
+|:---------:|---------|-------------|
+| **`0`** | **Healthy / Repaired** | Certificate chain is complete and trusted, or `--fix-bundle` successfully repaired it. |
+| **`1`** | **Broken / Error** | Verification failed (missing intermediate, hostname mismatch, expired cert, or connection error). |
+| **`2`** | **Expiring Soon** | Chain is cryptographically trusted, but at least one certificate expires within `--expiry-warn` days. |
 
 ---
 
@@ -180,14 +266,15 @@ cert-chain-doctor api.example.com --format json | jq '.analysis.is_valid'
 
 ```
 cert-chain-doctor
-├── cmd/cert-chain-doctor/   # CLI entry point, argument reordering, exit code engine
+├── cmd/cert-chain-doctor/   # CLI entry point, argument reordering, batch runner, HTTP serve mode
 ├── internal/
-│   ├── analyzer/            # X.509 chain continuity, SKI/AKI matching, SAN & expiry verification
-│   ├── aia/                 # HTTP AIA fetcher (DER/PEM), signature verifier & bundle builder
-│   ├── probe/               # Custom crypto/tls dialer, STARTTLS protocol drivers, file loader
-│   ├── render/              # ASCII tree diagram generator and JSON formatter
+│   ├── analyzer/            # Continuity validator, SKI/AKI matching, CA/B Forum checks, SAN verifier
+│   ├── aia/                 # HTTP AIA fetcher (DER/PEM/PKCS#7), signature verifier & bundle repairer
+│   ├── probe/               # Custom TLS dialer, STARTTLS protocol drivers (SMTP, Postgres, etc.)
+│   ├── render/              # Visual ASCII tree diagram, ANSI color engine, K8s Secret generator
+│   ├── revocation/          # Active OCSP & CRL endpoint reachability prober
 │   └── testpki/             # In-memory dynamic PKI engine with httptest AIA server for testing
-├── Makefile                 # Build, test, test-race, vet, clean
+├── Makefile                 # Cross-platform build, test-race, vet, clean
 └── README.md
 ```
 
