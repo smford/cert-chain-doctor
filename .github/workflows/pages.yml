@@ -8,8 +8,6 @@ on:
       - 'README.md'
       - 'scripts/update-docs-version.sh'
       - '.github/workflows/pages.yml'
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       version:

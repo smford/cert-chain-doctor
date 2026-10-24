@@ -58,16 +58,16 @@ VERDICT: BROKEN CHAIN: Missing intermediate CA certificate (fixable via AIA with
 
 ## Core Problems Solved
 
-1. **The "Works in Chrome, Fails in curl/Alpine/Go" Outage**  
+1. **The "Works in Chrome, Fails in curl/Alpine/Go" Outage**
    Desktop browsers silently fetch missing intermediate certificates using Authority Information Access (AIA) or reuse cached intermediates from other sessions. Command-line tools (`curl`), container runtimes (Alpine Docker), Python microservices, and Go binaries strictly enforce complete chains. `cert-chain-doctor` finds the gap, downloads the missing intermediate via AIA, and reassembles a valid fullchain.
 
-2. **Misordered Certificate Bundles**  
+2. **Misordered Certificate Bundles**
    Web servers like Nginx and Envoy require certificates in strict hierarchical order: `Leaf -> Intermediate 1 -> Intermediate 2`. Inverted or disordered bundles are flagged and automatically sorted.
 
-3. **Handshake Bloat from Redundant Root CAs**  
+3. **Handshake Bloat from Redundant Root CAs**
    Sending self-signed Root CAs in the TLS handshake wastes packet bytes, inflates latency, and can trigger extra TCP round-trips over mobile networks. `cert-chain-doctor` strips redundant roots automatically.
 
-4. **Expiring & Weak Cryptography Warnings**  
+4. **Expiring & Weak Cryptography Warnings**
    Provides early warnings for certificates expiring within 14 days (customizable via `--expiry-warn`), flags deprecated signature algorithms (MD5, SHA-1), and identifies weak RSA keys (<2048 bits).
 
 ---
