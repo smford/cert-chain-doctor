@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 408" width="100%" height="408" style="max-width: 100%; border-radius: 8px; box-shadow: 0 16px 36px rgba(0,0,0,0.35);">
+  <defs>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1f242c" />
+      <stop offset="100%" stop-color="#161b22" />
+    </linearGradient>
+  </defs>
+  <!-- Window Background -->
+  <rect width="860" height="408" rx="10" ry="10" fill="#0d1117" stroke="#30363d" stroke-width="1.2" />
+  <path d="M 0 10 C 0 4.477 4.477 0 10 0 L 850 0 C 855.523 0 860 4.477 860 10 L 860 36 L 0 36 Z" fill="url(#headerGrad)" stroke="#30363d" stroke-width="1.2" />
+  <line x1="0" y1="36" x2="860" y2="36" stroke="#30363d" stroke-width="1" />
+  <circle cx="20" cy="18" r="6" fill="#ff5f56" stroke="#e0443e" stroke-width="0.5" />
+  <circle cx="38" cy="18" r="6" fill="#ffbd2e" stroke="#dea123" stroke-width="0.5" />
+  <circle cx="56" cy="18" r="6" fill="#27c93f" stroke="#1aab29" stroke-width="0.5" />
+  <text x="430.0" y="22" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="12" fill="#8b949e" text-anchor="middle" font-weight="500">cert-chain-doctor --hosts-file fleet-targets.txt</text>
+  <text font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="12.5" xml:space="preserve">
+    <tspan x="22" y="46"><tspan style="fill: #3fb950; font-weight: bold;">$ </tspan><tspan style="fill: #e6edf3; font-weight: bold;">cert-chain-doctor --hosts-file fleet-targets.txt</tspan></tspan>
+    <tspan x="22" y="66"><tspan style="fill: #8b949e;">================================================================================</tspan></tspan>
+    <tspan x="22" y="86"><tspan style="fill: #58a6ff; font-weight: bold;">                   CERT CHAIN DOCTOR - BATCH AUDIT SUMMARY</tspan></tspan>
+    <tspan x="22" y="106"><tspan style="fill: #8b949e;">================================================================================</tspan></tspan>
+    <tspan x="22" y="126"><tspan style="fill: #e3b341; font-weight: bold;">TARGET                           TLS        STATUS       EXPIRY   FINDINGS</tspan></tspan>
+    <tspan x="22" y="146"><tspan style="fill: #8b949e;">--------------------------------------------------------------------------------</tspan></tspan>
+    <tspan x="22" y="166"><tspan style="fill: #e6edf3;">api.production.example.com:443   </tspan><tspan style="fill: #d2a8ff;">TLS 1.3    </tspan><tspan style="fill: #3fb950; font-weight: bold;">HEALTHY      </tspan><tspan style="fill: #e6edf3;">68d      </tspan><tspan style="fill: #8b949e;">None</tspan></tspan>
+    <tspan x="22" y="186"><tspan style="fill: #e6edf3;">auth.production.example.com:443  </tspan><tspan style="fill: #d2a8ff;">TLS 1.3    </tspan><tspan style="fill: #f85149; font-weight: bold;">BROKEN       </tspan><tspan style="fill: #e6edf3;">89d      </tspan><tspan style="fill: #f85149; font-weight: bold;">MISSING_INTERMEDIATE</tspan></tspan>
+    <tspan x="22" y="206"><tspan style="fill: #e6edf3;">db-primary.internal.net:5432     </tspan><tspan style="fill: #d2a8ff;">TLS 1.3    </tspan><tspan style="fill: #3fb950; font-weight: bold;">HEALTHY      </tspan><tspan style="fill: #e6edf3;">180d     </tspan><tspan style="fill: #8b949e;">None</tspan></tspan>
+    <tspan x="22" y="226"><tspan style="fill: #e6edf3;">mail-gw.customer.example.com:587 </tspan><tspan style="fill: #d2a8ff;">TLS 1.2    </tspan><tspan style="fill: #e3b341; font-weight: bold;">WARNING      </tspan><tspan style="fill: #e3b341; font-weight: bold;">5d       </tspan><tspan style="fill: #e3b341; font-weight: bold;">CERT_EXPIRING_SOON</tspan></tspan>
+    <tspan x="22" y="246"><tspan style="fill: #e6edf3;">billing-web.us-east.net:443      </tspan><tspan style="fill: #d2a8ff;">TLS 1.3    </tspan><tspan style="fill: #3fb950; font-weight: bold;">HEALTHY      </tspan><tspan style="fill: #e6edf3;">44d      </tspan><tspan style="fill: #8b949e;">None</tspan></tspan>
+    <tspan x="22" y="266"><tspan style="fill: #e6edf3;">legacy-vpn.office.net:443        </tspan><tspan style="fill: #d2a8ff;">TLS 1.2    </tspan><tspan style="fill: #e3b341; font-weight: bold;">WARNING      </tspan><tspan style="fill: #e6edf3;">210d     </tspan><tspan style="fill: #e3b341;">REDUNDANT_ROOT</tspan></tspan>
+    <tspan x="22" y="286"><tspan style="fill: #e6edf3;">k8s-ingress.edge.net:443         </tspan><tspan style="fill: #d2a8ff;">TLS 1.3    </tspan><tspan style="fill: #3fb950; font-weight: bold;">HEALTHY      </tspan><tspan style="fill: #e6edf3;">72d      </tspan><tspan style="fill: #8b949e;">None</tspan></tspan>
+    <tspan x="22" y="306"><tspan style="fill: #8b949e;">--------------------------------------------------------------------------------</tspan></tspan>
+    <tspan x="22" y="326"><tspan style="fill: #e6edf3;">SUMMARY: 7 targets audited | </tspan><tspan style="fill: #3fb950; font-weight: bold;">4 HEALTHY</tspan><tspan style="fill: #8b949e;"> | </tspan><tspan style="fill: #e3b341; font-weight: bold;">2 WARNING</tspan><tspan style="fill: #8b949e;"> | </tspan><tspan style="fill: #f85149; font-weight: bold;">1 BROKEN</tspan></tspan>
+    <tspan x="22" y="346"><tspan style="fill: #e6edf3;"></tspan></tspan>
+    <tspan x="22" y="366"><tspan style="fill: #8b949e;">Run </tspan><tspan style="fill: #79c0ff; font-weight: bold;">cert-chain-doctor auth.production.example.com --fix-bundle fullchain.pem</tspan><tspan style="fill: #8b949e;"> to auto-repair.</tspan></tspan>
+  </text>
+</svg>
