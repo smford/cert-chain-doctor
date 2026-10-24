@@ -6,7 +6,7 @@ description: "Visual TLS Handshake & Intermediate Cert Debugger"
 # cert-chain-doctor
 
 [![CI](https://github.com/smford/cert-chain-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/smford/cert-chain-doctor/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.1.0-blue.svg)](https://github.com/smford/cert-chain-doctor/releases/latest)
+[![Version](https://img.shields.io/badge/version-v0.1.1-blue.svg)](https://github.com/smford/cert-chain-doctor/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **The visual diagnostic tool and automatic repair surgeon for broken TLS handshakes and intermediate certificate chains.**

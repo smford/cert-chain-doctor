@@ -22,11 +22,11 @@ Download pre-compiled, static binaries for Linux, macOS, and Windows from GitHub
 
 ```bash
 # macOS (Apple Silicon arm64)
-curl -sSL https://github.com/smford/cert-chain-doctor/releases/download/v0.1.0/cert-chain-doctor_0.1.0_darwin_arm64.tar.gz | tar -xz
+curl -sSL https://github.com/smford/cert-chain-doctor/releases/download/v0.1.1/cert-chain-doctor_0.1.0_darwin_arm64.tar.gz | tar -xz
 sudo mv cert-chain-doctor /usr/local/bin/
 
 # Linux (amd64)
-curl -sSL https://github.com/smford/cert-chain-doctor/releases/download/v0.1.0/cert-chain-doctor_0.1.0_linux_amd64.tar.gz | tar -xz
+curl -sSL https://github.com/smford/cert-chain-doctor/releases/download/v0.1.1/cert-chain-doctor_0.1.0_linux_amd64.tar.gz | tar -xz
 sudo mv cert-chain-doctor /usr/local/bin/
 ```
 
