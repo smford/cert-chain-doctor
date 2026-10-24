@@ -6,7 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -17,14 +19,42 @@ import (
 )
 
 var (
-	version = "1.0.0"
+	version = "0.1.0"
+	commit  = "dev"
+	date    = "unknown"
 )
+
+func formatVersion() string {
+	v := version
+	c := commit
+	d := date
+
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if (v == "" || v == "dev") && info.Main.Version != "" && info.Main.Version != "(devel)" {
+			v = info.Main.Version
+		}
+		for _, setting := range info.Settings {
+			if setting.Key == "vcs.revision" && (c == "dev" || c == "") {
+				c = setting.Value
+			}
+			if setting.Key == "vcs.time" && (d == "unknown" || d == "") {
+				d = setting.Value
+			}
+		}
+	}
+
+	return fmt.Sprintf("cert-chain-doctor %s (commit: %s, date: %s)\nCopyright (c) 2026 smford\nLicensed under the MIT License", v, c, d)
+}
 
 func main() {
 	os.Exit(run(os.Args[1:]))
 }
 
 func run(args []string) int {
+	if len(args) > 0 && args[0] == "serve" {
+		return runServer(args[1:])
+	}
+
 	args = reorderArgs(args)
 	fs := flag.NewFlagSet("cert-chain-doctor", flag.ContinueOnError)
 
@@ -38,9 +68,10 @@ func run(args []string) int {
 	caFile := fs.String("ca-file", "", "Path to custom CA root certificate(s) PEM file for verification")
 	timeoutSec := fs.Int("timeout", 10, "Network dial and handshake timeout in seconds")
 	showVersion := fs.Bool("version", false, "Print version information and exit")
+	fs.BoolVar(showVersion, "v", false, "Print version information and exit")
 
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "cert-chain-doctor v%s — Visual TLS Handshake & Intermediate Cert Debugger\n\n", version)
+		fmt.Fprintf(os.Stderr, "%s\n\n", formatVersion())
 		fmt.Fprintf(os.Stderr, "Usage:\n")
 		fmt.Fprintf(os.Stderr, "  cert-chain-doctor [flags] <host[:port]>\n")
 		fmt.Fprintf(os.Stderr, "  cert-chain-doctor --file <bundle.pem> [flags]\n\n")
@@ -58,13 +89,13 @@ func run(args []string) int {
 		return 1
 	}
 
-	if *showVersion {
-		fmt.Printf("cert-chain-doctor version %s\n", version)
+	remaining := fs.Args()
+	if *showVersion || (len(remaining) == 1 && (remaining[0] == "version" || remaining[0] == "-v")) {
+		fmt.Println(formatVersion())
 		return 0
 	}
 
 	target := ""
-	remaining := fs.Args()
 	if len(remaining) > 0 {
 		target = remaining[0]
 	}
@@ -229,6 +260,8 @@ func reorderArgs(args []string) []string {
 	boolFlags := map[string]bool{
 		"-version":  true,
 		"--version": true,
+		"-v":        true,
+		"--v":       true,
 		"-h":        true,
 		"--help":    true,
 	}
@@ -256,4 +289,70 @@ func reorderArgs(args []string) []string {
 	}
 
 	return append(flags, positionals...)
+}
+
+func runServer(args []string) int {
+	sfs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	addr := sfs.String("addr", ":8080", "HTTP server listen address")
+	if err := sfs.Parse(args); err != nil {
+		return 1
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(fmt.Sprintf(`{"status":"ok","version":"%s"}`, version)))
+	})
+	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte(formatVersion()))
+	})
+	mux.HandleFunc("/diagnose", func(w http.ResponseWriter, r *http.Request) {
+		target := r.URL.Query().Get("target")
+		if target == "" {
+			http.Error(w, `{"error":"missing 'target' parameter"}`, http.StatusBadRequest)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		probeRes, err := probe.Probe(ctx, probe.ProbeOptions{
+			TargetHost: target,
+			Timeout:    10 * time.Second,
+		})
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"probe failed: %s"}`, err.Error()), http.StatusBadGateway)
+			return
+		}
+
+		roots, _ := x509.SystemCertPool()
+		analysis := analyzer.Analyze(probeRes.Certificates, analyzer.AnalyzeOptions{
+			Hostname: probeRes.Details.ServerName,
+			RootPool: roots,
+		})
+
+		out := render.OutputData{
+			Target:    target,
+			Handshake: &probeRes.Details,
+			Analysis:  analysis,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = render.RenderJSON(w, out)
+	})
+
+	server := &http.Server{
+		Addr:         *addr,
+		Handler:      mux,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+	}
+
+	fmt.Printf("cert-chain-doctor HTTP diagnostic server listening on %s\n", *addr)
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
+		return 1
+	}
+	return 0
 }

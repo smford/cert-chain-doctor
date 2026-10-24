@@ -118,4 +118,43 @@ func TestCLI_InvalidArguments(t *testing.T) {
 	if exitCode != 0 {
 		t.Errorf("Expected exit code 0 for --version, got %d", exitCode)
 	}
+
+	exitCode = run([]string{"version"})
+	if exitCode != 0 {
+		t.Errorf("Expected exit code 0 for 'version', got %d", exitCode)
+	}
+}
+
+func TestCLI_ServeEndpoints(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+	})
+	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte(formatVersion()))
+	})
+
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/healthz")
+	if err != nil {
+		t.Fatalf("Failed to GET /healthz: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status 200 on /healthz, got %d", resp.StatusCode)
+	}
+
+	respV, err := http.Get(ts.URL + "/version")
+	if err != nil {
+		t.Fatalf("Failed to GET /version: %v", err)
+	}
+	defer respV.Body.Close()
+	if respV.StatusCode != http.StatusOK {
+		t.Errorf("Expected status 200 on /version, got %d", respV.StatusCode)
+	}
 }

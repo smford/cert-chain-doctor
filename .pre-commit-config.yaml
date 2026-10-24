@@ -1,0 +1,63 @@
+# See https://pre-commit.com for more information
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
+
+repos:
+  # Core file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.min\.(js|css)$|docs/index\.html$'
+      - id: end-of-file-fixer
+        exclude: '\.min\.(js|css)$|docs/index\.html$'
+      - id: check-yaml
+        args: ['--allow-multiple-documents']
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+
+  # Secret detection
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.0
+    hooks:
+      - id: gitleaks
+
+  # Shell script validation
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        files: ^scripts/.*\.sh$
+
+  # Go formatting and verification
+  - repo: local
+    hooks:
+      - id: go-fmt
+        name: go-fmt
+        entry: gofmt -s -l -w
+        language: system
+        types: [go]
+      - id: go-vet
+        name: go-vet
+        entry: go vet ./...
+        language: system
+        pass_filenames: false
+        types: [go]
+      - id: go-mod-tidy
+        name: go-mod-tidy
+        entry: go mod tidy
+        language: system
+        pass_filenames: false
+        types: [go]
+
+  # Conventional commit message validation
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.6.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: ['feat', 'fix', 'docs', 'style', 'refactor', 'perf', 'test', 'chore', 'ci', 'build', 'revert']

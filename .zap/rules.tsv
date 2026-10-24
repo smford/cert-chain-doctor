@@ -1,0 +1,7 @@
+# ZAP rule configuration file
+# Format: <rule-id>	<action>	<comment>
+# Actions: IGNORE, INFO, WARN, FAIL
+100000	IGNORE	Ignore custom spider rules
+10020	IGNORE	Anti-CSRF Tokens Check (API endpoints)
+10038	IGNORE	Content Security Policy (CSP) Header Not Set
+10096	IGNORE	Timestamp Disclosure

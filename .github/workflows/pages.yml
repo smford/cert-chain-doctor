@@ -1,0 +1,105 @@
+name: Deploy Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'scripts/update-docs-version.sh'
+      - '.github/workflows/pages.yml'
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (e.g. v1.0.0)'
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        description: 'Release version tag (e.g. v1.0.0)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Resolve target version
+        id: resolve-version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          TARGET_VERSION="${INPUT_VERSION}"
+          if [ -z "$TARGET_VERSION" ]; then
+            TARGET_VERSION=$(gh release view --json tagName -q .tagName 2>/dev/null || true)
+          fi
+          if [ -z "$TARGET_VERSION" ]; then
+            TARGET_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
+          fi
+          echo "version=${TARGET_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Target docs version: ${TARGET_VERSION}"
+
+      - name: Update documentation versions
+        run: |
+          bash scripts/update-docs-version.sh "${{ steps.resolve-version.outputs.version }}" docs
+
+      - name: Commit updated documentation (if changed)
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain docs/)" ]; then
+            git add docs/
+            git commit -m "docs: sync release version to ${{ steps.resolve-version.outputs.version }} [skip ci]" || true
+            git push origin main || true
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+
+      - name: Pull latest release of md-web-renderer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Pulling down latest release of md-web-renderer..."
+          gh release download --repo smford/md-web-renderer --pattern "index.html" --dir docs --clobber || \
+          curl -sSL https://github.com/smford/md-web-renderer/releases/latest/download/index.html -o docs/index.html
+          touch docs/.nojekyll
+          python3 -c '
+          import os
+          p = "docs/index.html"
+          if os.path.exists("docs/js/analytics.js") and os.path.exists(p):
+              content = open(p, encoding="utf-8").read()
+              if "js/analytics.js" not in content:
+                  tag = """  <!-- Google Analytics 4 (GA4) -->\n  <script async src="https://www.googletagmanager.com/gtag/js?id=cert-chain-doctor"></script>\n  <script>\n    window.dataLayer = window.dataLayer || [];\n    function gtag(){dataLayer.push(arguments);}\n    gtag("js", new Date());\n    gtag("config", "cert-chain-doctor", { send_page_view: false });\n  </script>\n  <script src="js/analytics.js" defer></script>\n</head>"""
+                  open(p, "w", encoding="utf-8").write(content.replace("</head>", tag))
+          '
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: 'docs'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

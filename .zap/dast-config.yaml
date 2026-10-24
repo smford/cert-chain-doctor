@@ -1,0 +1,4 @@
+# OWASP ZAP DAST Configuration for cert-chain-doctor
+target: "http://localhost:8080"
+healthcheck: "http://localhost:8080/healthz"
+fail_on: "WARN"
