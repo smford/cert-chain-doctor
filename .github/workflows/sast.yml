@@ -22,16 +22,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@6bb031afdd8eb862ea3fc1848194185e076637e5 # v3.28.11
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: go
           queries: security-extended
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@6bb031afdd8eb862ea3fc1848194185e076637e5 # v3.28.11
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
 
   semgrep:
     name: Semgrep OSS Scan
@@ -40,13 +40,13 @@ jobs:
       image: semgrep/semgrep:latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run Semgrep
         run: semgrep scan --config auto --sarif --output semgrep.sarif
 
       - name: Upload Semgrep SARIF report
-        uses: github/codeql-action/upload-sarif@6bb031afdd8eb862ea3fc1848194185e076637e5 # v3.28.11
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         if: always()
         with:
           sarif_file: semgrep.sarif
